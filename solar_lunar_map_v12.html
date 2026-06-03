@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soleil & Lune — Carte du Monde</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap');
+:root { --bg:#07101f; --panel:#0b1828; --border:#1a3050; --text:#c8dcf4; --muted:#4a6890; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); font-family:'JetBrains Mono',monospace; color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+header { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; border-bottom:1px solid var(--border); background:var(--panel); flex-shrink:0; z-index:2000; }
+header h1 { font-family:'Crimson Pro',serif; font-size:18px; font-weight:600; color:var(--text); letter-spacing:1px; }
+#clock { font-size:10px; color:var(--muted); text-align:right; line-height:1.8; }
+#layout { display:flex; flex:1; overflow:hidden; }
+#map { flex:1; z-index:1; }
+.leaflet-tile-pane { filter:brightness(0.82) saturate(0.85); }
+#panel { width:196px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; z-index:2000; }
+.pcard { padding:10px 12px 8px; border-bottom:1px solid var(--border); }
+.pcard-title { font-family:'Crimson Pro',serif; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+#moon-canvas-wrap { display:flex; justify-content:center; margin-bottom:6px; }
+#moonCanvas { border-radius:50%; display:block; box-shadow:0 0 20px rgba(100,160,255,0.18); }
+#phase-name { text-align:center; font-size:11px; font-weight:600; color:#ccdcf0; margin-bottom:2px; }
+#phase-illum { text-align:center; font-size:10px; color:var(--muted); }
+.drow { display:flex; justify-content:space-between; font-size:10px; padding:3px 0; border-top:1px solid rgba(30,60,100,0.4); }
+.drow .lbl { color:var(--muted); } .drow .val { color:var(--text); font-weight:600; }
+.leg-item { display:flex; align-items:center; gap:7px; font-size:10px; color:#5a7aaa; padding:2px 0; }
+.leg-box { width:18px; height:7px; border-radius:2px; flex-shrink:0; }
+.leg-line { width:24px; height:0; flex-shrink:0; }
+.sep { margin-top:5px; padding-top:5px; border-top:1px solid rgba(30,60,100,0.4); }
+.leaflet-control-zoom { border:1px solid var(--border)!important; }
+.leaflet-control-zoom a { background:var(--panel)!important; color:var(--text)!important; border-color:var(--border)!important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>&#9728; Soleil &nbsp;·&nbsp; &#9790; Lune &nbsp;·&nbsp; Planètes — Temps Réel</h1>
+  <div id="clock">—</div>
+</header>
+<div id="layout">
+  <div id="map"></div>
+  <div id="panel">
+
+    <!-- PHASE LUNAIRE -->
+    <div class="pcard">
+      <div class="pcard-title">Phase Lunaire</div>
+      <div id="moon-canvas-wrap"><canvas id="moonCanvas" width="136" height="136"></canvas></div>
+      <div id="phase-name">—</div>
+      <div id="phase-illum">—</div>
+      <div class="drow"><span class="lbl">Âge lunaire</span><span class="val" id="v-age">—</span></div>
+    </div>
+
+    <!-- SOLEIL LEVER/COUCHER -->
+    <div class="pcard">
+      <div class="pcard-title">&#9728; Soleil — Saint-Félicien</div>
+      <div class="drow"><span class="lbl">Lever</span><span class="val" id="v-sunrise">—</span></div>
+      <div class="drow"><span class="lbl">Coucher</span><span class="val" id="v-sunset">—</span></div>
+      <div class="drow"><span class="lbl">Durée du jour</span><span class="val" id="v-daylength">—</span></div>
+    </div>
+
+    <!-- LUNE LEVER/COUCHER -->
+    <div class="pcard">
+      <div class="pcard-title">&#9790; Lune — Saint-Félicien</div>
+      <div class="drow"><span class="lbl">Lever</span><span class="val" id="v-moonrise">—</span></div>
+      <div class="drow"><span class="lbl">Coucher</span><span class="val" id="v-moonset">—</span></div>
+    </div>
+
+    <!-- OBJETS -->
+    <div class="pcard">
+      <div class="pcard-title">Objets</div>
+      <div class="leg-item">
+        <svg width="20" height="20" viewBox="0 0 20 20"><defs><radialGradient id="sg" cx="40%" cy="35%" r="60%"><stop offset="0%" stop-color="#fffbe0"/><stop offset="100%" stop-color="#ffcc00"/></radialGradient></defs>
+          <line x1="10" y1="1" x2="10" y2="4" stroke="#ffd000" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="10" y1="16" x2="10" y2="19" stroke="#ffd000" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="1" y1="10" x2="4" y2="10" stroke="#ffd000" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="16" y1="10" x2="19" y2="10" stroke="#ffd000" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="3" y1="3" x2="5" y2="5" stroke="#ffd000" stroke-width="1.2" stroke-linecap="round"/>
+          <line x1="15" y1="15" x2="17" y2="17" stroke="#ffd000" stroke-width="1.2" stroke-linecap="round"/>
+          <line x1="15" y1="3" x2="17" y2="5" stroke="#ffd000" stroke-width="1.2" stroke-linecap="round"/>
+          <line x1="3" y1="15" x2="5" y2="17" stroke="#ffd000" stroke-width="1.2" stroke-linecap="round"/>
+          <circle cx="10" cy="10" r="5" fill="url(#sg)" stroke="#ff9900" stroke-width="0.8"/>
+        </svg>
+        <span style="color:#ffe055;font-weight:600;">Soleil</span>
+      </div>
+      <div class="leg-item" style="margin-top:3px">
+        <svg width="20" height="20" viewBox="0 0 20 20">
+          <circle cx="10" cy="10" r="8" fill="#c8daee" stroke="#6080b0" stroke-width="0.8"/>
+          <circle cx="7" cy="8" r="1.8" fill="rgba(80,100,160,0.35)"/>
+          <circle cx="12" cy="12" r="1.4" fill="rgba(80,100,160,0.3)"/>
+          <circle cx="8" cy="13" r="1.1" fill="rgba(80,100,160,0.25)"/>
+        </svg>
+        <span style="color:#b0c8ee;font-weight:600;">Lune</span>
+      </div>
+      <div class="sep">
+        <div class="leg-item"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#a09080" stroke="rgba(255,255,255,0.2)" stroke-width="0.6"/><text x="7" y="10.5" text-anchor="middle" font-size="7" fill="white" font-family="sans-serif">&#9791;</text></svg><span style="color:#c8bab0;font-weight:600;">Mercure</span></div>
+        <div class="leg-item"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#d4b458" stroke="rgba(255,255,255,0.2)" stroke-width="0.6"/><text x="7" y="10.5" text-anchor="middle" font-size="7" fill="white" font-family="sans-serif">&#9792;</text></svg><span style="color:#e8d080;font-weight:600;">Vénus</span></div>
+        <div class="leg-item"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#c83818" stroke="rgba(255,255,255,0.2)" stroke-width="0.6"/><text x="7" y="10.5" text-anchor="middle" font-size="7" fill="white" font-family="sans-serif">&#9794;</text></svg><span style="color:#e07060;font-weight:600;">Mars</span></div>
+        <div class="leg-item"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#c8a060" stroke="rgba(255,255,255,0.2)" stroke-width="0.6"/><text x="7" y="10.5" text-anchor="middle" font-size="7" fill="white" font-family="sans-serif">&#9795;</text></svg><span style="color:#d8b880;font-weight:600;">Jupiter</span></div>
+        <div class="leg-item"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#c8b880" stroke="rgba(255,255,255,0.2)" stroke-width="0.6"/><text x="7" y="10.5" text-anchor="middle" font-size="7" fill="white" font-family="sans-serif">&#9796;</text></svg><span style="color:#d4c090;font-weight:600;">Saturne</span></div>
+      </div>
+      <div class="sep">
+        <div class="leg-item"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="#ff2222" stroke="white" stroke-width="1.2"/></svg><span style="color:#ff7070;font-weight:600;">Planétarium Saint-Félicien</span></div>
+      </div>
+    </div>
+
+    <!-- LÉGENDE LIGNES -->
+    <div class="pcard">
+      <div class="pcard-title">Lignes &amp; Zones</div>
+      <div class="leg-item"><div class="leg-box" style="background:#ffee44;opacity:.85"></div>Équateur céleste</div>
+      <div class="leg-item"><div class="leg-box" style="background:#ff8800;opacity:.8;border-top:2px dashed #ff8800;height:0;margin-top:3px"></div>Tropiques ±23°26′</div>
+      <div class="leg-item"><div class="leg-box" style="background:#ff3333;opacity:.75;border-top:2px dashed #ff3333;height:0;margin-top:3px"></div>Cercles polaires ±66°34′</div>
+      <div class="sep">
+        <div class="leg-item"><div style="width:24px;height:0;border-top:2px solid #ffaa00;flex-shrink:0"></div>Lever du Soleil</div>
+        <div class="leg-item"><div style="width:24px;height:0;border-top:2px solid #ff5500;flex-shrink:0"></div>Coucher du Soleil</div>
+      </div>
+      <div class="sep">
+        <div class="leg-item"><div class="leg-box" style="background:rgba(0,10,40,0.7)"></div>Nuit</div>
+        <div class="leg-item"><div class="leg-box" style="background:rgba(0,20,70,0.45)"></div>Crép. astronomique −18°</div>
+        <div class="leg-item"><div class="leg-box" style="background:rgba(0,40,100,0.35)"></div>Crép. nautique −12°</div>
+        <div class="leg-item"><div class="leg-box" style="background:rgba(0,60,140,0.25)"></div>Crép. civil −6°</div>
+      </div>
+    </div>
+
+  </div><!-- end panel -->
+</div><!-- end layout -->
+
+<script>
+// ================================================================
+//  CONSTANTES
+// ================================================================
+const D2R = Math.PI / 180;
+const R2D = 180 / Math.PI;
+const OBS_LAT =  48.68389;   // Planétarium Saint-Félicien
+const OBS_LON = -72.48778;
+
+// ================================================================
+//  LEAFLET
+// ================================================================
+const map = L.map('map', {
+  center: [20, 10], zoom: 2, minZoom: 1, maxZoom: 19,
+  worldCopyJump: true,
+  zoomSnap: 0.1,
+  zoomDelta: 0.25,
+  wheelPxPerZoomLevel: 200
+});
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19, maxNativeZoom: 19
+}).addTo(map);
+
+// ================================================================
+//  LIGNES STATIQUES
+// ================================================================
+L.polyline([[0,-180],[0,180]],        { color:'#ffee44', weight:1.5, opacity:0.85 }).addTo(map);
+L.polyline([[23.437,-180],[23.437,180]],  { color:'#ff8800', weight:1.2, opacity:0.8,  dashArray:'9 5' }).addTo(map);
+L.polyline([[-23.437,-180],[-23.437,180]],{ color:'#ff8800', weight:1.2, opacity:0.8,  dashArray:'9 5' }).addTo(map);
+L.polyline([[66.563,-180],[66.563,180]],  { color:'#ff3333', weight:1.2, opacity:0.78, dashArray:'5 7' }).addTo(map);
+L.polyline([[-66.563,-180],[-66.563,180]],{ color:'#ff3333', weight:1.2, opacity:0.78, dashArray:'5 7' }).addTo(map);
+
+// Labels statiques
+function mkLabel(lat, lon, txt, color) {
+  L.marker([lat, lon], {
+    icon: L.divIcon({ className:'',
+      html:'<span style="font:600 9px \'JetBrains Mono\',monospace;color:'+color+';white-space:nowrap;text-shadow:0 0 5px #000,0 0 10px #000;">'+txt+'</span>',
+      iconAnchor:[0,6] }), interactive:false
+  }).addTo(map);
+}
+mkLabel( 0.5,  -174, 'Équateur céleste',                '#ffee44');
+mkLabel( 23.9, -174, 'Tropique du Cancer +23°26′',      '#ff9933');
+mkLabel(-22.9, -174, 'Tropique du Capricorne −23°26′',  '#ff9933');
+mkLabel( 67.1, -174, 'Cercle polaire arctique +66°34′', '#ff6666');
+mkLabel(-65.9, -174, 'Cercle polaire antarct. −66°34′', '#ff6666');
+
+// Planétarium Saint-Félicien
+const planIcon = L.divIcon({ className:'',
+  html:'<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#ff2222" stroke="white" stroke-width="1.5"/></svg>',
+  iconSize:[16,16], iconAnchor:[8,8] });
+L.marker([OBS_LAT, OBS_LON], { icon:planIcon, interactive:false, zIndexOffset:2000 }).addTo(map);
+L.marker([OBS_LAT, OBS_LON], {
+  icon: L.divIcon({ className:'',
+    html:'<span style="font:600 10px \'JetBrains Mono\',monospace;color:#ff7070;white-space:nowrap;text-shadow:0 0 4px #000,0 0 8px #000;margin-left:10px;display:block;">Planétarium<br>Saint-Félicien</span>',
+    iconAnchor:[-4,12] }), interactive:false, zIndexOffset:1999
+}).addTo(map);
+
+// ================================================================
+//  ASTRONOMIE — fonctions de base
+// ================================================================
+function jd(date) { return date.getTime() / 86400000 + 2440587.5; }
+
+function sunPos(date) {
+  const n   = jd(date) - 2451545.0;
+  const L   = ((280.460 + 0.9856474*n) % 360 + 360) % 360;
+  const g   = ((357.528 + 0.9856003*n) % 360 + 360) % 360;
+  const lam = (L + 1.915*Math.sin(g*D2R) + 0.020*Math.sin(2*g*D2R)) * D2R;
+  const eps = (23.439 - 0.0000004*n) * D2R;
+  const dec = Math.asin(Math.sin(eps)*Math.sin(lam)) * R2D;
+  const RA  = Math.atan2(Math.cos(eps)*Math.sin(lam), Math.cos(lam)) * R2D;
+  const GMST= ((280.46061837 + 360.98564736629*n) % 360 + 360) % 360;
+  let lon   = ((RA - GMST) % 360 + 360) % 360;
+  if (lon > 180) lon -= 360;
+  return { lat:dec, lon };
+}
+
+function moonPos(date) {
+  const n   = jd(date) - 2451545.0;
+  const L0  = ((218.316 + 13.176396*n) % 360 + 360) % 360;
+  const M   = ((134.963 + 13.064993*n) % 360 + 360) % 360;
+  const F   = ((93.272  + 13.229350*n) % 360 + 360) % 360;
+  const D   = ((297.850 + 12.190749*n) % 360 + 360) % 360;
+  const ms  = ((357.528 + 0.9856003*n) % 360 + 360) % 360;
+  const lDeg= L0 + 6.289*Math.sin(M*D2R) - 1.274*Math.sin((2*D-M)*D2R)
+    + 0.658*Math.sin(2*D*D2R) - 0.186*Math.sin(ms*D2R)
+    - 0.059*Math.sin((2*M-2*D)*D2R) - 0.057*Math.sin((M-2*D+ms)*D2R)
+    + 0.053*Math.sin((M+2*D)*D2R)   + 0.046*Math.sin((2*D-ms)*D2R)
+    + 0.041*Math.sin((M-ms)*D2R)    - 0.035*Math.sin(F*D2R)
+    - 0.031*Math.sin((M+ms)*D2R)    + 0.017*Math.sin(2*F*D2R);
+  const beta= 5.128*Math.sin(F*D2R) + 0.2806*Math.sin((M+F)*D2R)
+    + 0.2777*Math.sin((M-F)*D2R) + 0.1732*Math.sin((2*D-F)*D2R);
+  const eps = 23.439 * D2R;
+  const l   = lDeg*D2R, b = beta*D2R;
+  const sinDec = Math.sin(eps)*Math.sin(l)*Math.cos(b) + Math.cos(eps)*Math.sin(b);
+  const dec = Math.asin(Math.max(-1,Math.min(1,sinDec))) * R2D;
+  const RA  = Math.atan2(Math.cos(eps)*Math.sin(l)*Math.cos(b)-Math.sin(eps)*Math.sin(b), Math.cos(l)*Math.cos(b)) * R2D;
+  const GMST= ((280.46061837 + 360.98564736629*n) % 360+360) % 360;
+  let lon   = ((RA - GMST) % 360+360) % 360;
+  if (lon > 180) lon -= 360;
+  return { lat:dec, lon };
+}
+
+function moonPhase(date) {
+  const n    = jd(date) - 2451545.0;
+  const Ls   = ((280.460 + 0.9856474*n) % 360 + 360) % 360;
+  const gs   = ((357.528 + 0.9856003*n) % 360 + 360) % 360;
+  const lonS = (Ls + 1.915*Math.sin(gs*D2R) + 0.020*Math.sin(2*gs*D2R) + 360) % 360;
+  const L0m  = ((218.316 + 13.176396*n) % 360 + 360) % 360;
+  const Mm   = ((134.963 + 13.064993*n) % 360 + 360) % 360;
+  const Fm   = ((93.272  + 13.229350*n) % 360 + 360) % 360;
+  const Dm   = ((297.850 + 12.190749*n) % 360 + 360) % 360;
+  const lonM = (L0m + 6.289*Math.sin(Mm*D2R) - 1.274*Math.sin((2*Dm-Mm)*D2R)
+    + 0.658*Math.sin(2*Dm*D2R) - 0.214*Math.sin(2*Fm*D2R) - 0.110*Math.sin(Dm*D2R) + 360) % 360;
+  const elong = ((lonM - lonS) % 360 + 360) % 360;
+  const illum = (1 - Math.cos(elong*D2R)) / 2;
+  const age   = elong / 360 * 29.53058867;
+  let name;
+  if      (elong <  11)              name = 'Nouvelle Lune &#127761;';
+  else if (elong <  84)              name = 'Croissant croissant &#127762;';
+  else if (elong <  96)              name = 'Premier Quartier &#127763;';
+  else if (elong < 169)              name = 'Gibbeuse croissante &#127764;';
+  else if (elong < 191)              name = 'Pleine Lune &#127765;';
+  else if (elong < 264)              name = 'Gibbeuse décroissante &#127766;';
+  else if (elong < 276)              name = 'Dernier Quartier &#127767;';
+  else if (elong < 349)              name = 'Croissant décroissant &#127768;';
+  else                               name = 'Nouvelle Lune &#127761;';
+  return { age, illum, name, elong };
+}
+
+// ================================================================
+//  PLANÈTES — éléments orbitaux JPL
+// ================================================================
+function planetPos(date) {
+  const JD  = jd(date);
+  const n   = JD - 2451545.0;
+  const eps = 23.439 - 0.0000004*n;
+  const Me  = ((357.529 + 0.98560028*n) % 360 + 360) % 360;
+  const Le  = ((280.459 + 0.98564736*n) % 360 + 360) % 360;
+  const Ce  = 1.9146*Math.sin(Me*D2R) + 0.01993*Math.sin(2*Me*D2R);
+  const Re  = 1.00014 - 0.01671*Math.cos(Me*D2R) - 0.00014*Math.cos(2*Me*D2R);
+  const Xe  = Re*Math.cos((Le+Ce)*D2R);
+  const Ye  = Re*Math.sin((Le+Ce)*D2R);
+
+  function calc(a0,e0,i0,Om0,w0,M0,dM) {
+    const Mv  = ((M0 + dM*n) % 360 + 360) % 360;
+    const Om  = Om0*D2R, i=i0*D2R, w=w0*D2R;
+    let E     = Mv*D2R;
+    for (let k=0;k<8;k++) E = Mv*D2R + e0*Math.sin(E);
+    const nu  = 2*Math.atan2(Math.sqrt(1+e0)*Math.sin(E/2), Math.sqrt(1-e0)*Math.cos(E/2));
+    const r   = a0*(1-e0*Math.cos(E));
+    const xh  = r*(Math.cos(Om)*Math.cos(nu+w)-Math.sin(Om)*Math.sin(nu+w)*Math.cos(i));
+    const yh  = r*(Math.sin(Om)*Math.cos(nu+w)+Math.cos(Om)*Math.sin(nu+w)*Math.cos(i));
+    const zh  = r*(Math.sin(nu+w)*Math.sin(i));
+    const xg  = xh-Xe, yg=yh-Ye, zg=zh;
+    const lG  = (Math.atan2(yg,xg)*R2D+360)%360;
+    const bG  = Math.atan2(zg,Math.sqrt(xg*xg+yg*yg))*R2D;
+    const e   = eps*D2R;
+    const sinDec = Math.sin(bG*D2R)*Math.cos(e)+Math.cos(bG*D2R)*Math.sin(e)*Math.sin(lG*D2R);
+    const dec    = Math.asin(Math.max(-1,Math.min(1,sinDec)))*R2D;
+    const RA     = Math.atan2(Math.sin(lG*D2R)*Math.cos(e)-Math.tan(bG*D2R)*Math.sin(e),Math.cos(lG*D2R))*R2D;
+    const GMST   = ((280.46061837+360.98564736629*n)%360+360)%360;
+    let lon      = ((RA-GMST)%360+360)%360;
+    if (lon>180) lon-=360;
+    return {lat:dec,lon};
+  }
+  return {
+    mercury: calc(0.38710,0.20563,7.005, 48.331, 77.456,252.251,4.092317),
+    venus:   calc(0.72333,0.00677,3.395, 76.680,131.564,181.979,1.602130),
+    mars:    calc(1.52368,0.09340,1.850, 49.558,336.060,355.433,0.524039),
+    jupiter: calc(5.20260,0.04849,1.303,100.464, 14.331, 34.351,0.083056),
+    saturn:  calc(9.55491,0.05551,2.489,113.666, 93.057, 50.077,0.033371),
+  };
+}
+
+const PLANETS = [
+  {key:'mercury', sym:'&#9791;', color:'#a09080', sz:14},
+  {key:'venus',   sym:'&#9792;', color:'#d4b458', sz:16},
+  {key:'mars',    sym:'&#9794;', color:'#c83818', sz:15},
+  {key:'jupiter', sym:'&#9795;', color:'#c8a060', sz:19},
+  {key:'saturn',  sym:'&#9796;', color:'#c8b880', sz:16},
+];
+
+// ================================================================
+//  LEVER / COUCHER — SOLEIL (USNO)
+// ================================================================
+function hms(h) {
+  if (h === null) return '—';
+  while (h < 0)  h += 24;
+  while (h >= 24) h -= 24;
+  const hh=Math.floor(h), mm=Math.floor((h-hh)*60), ss=Math.floor(((h-hh)*60-mm)*60);
+  return String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+}
+
+function solarRiseSet(date, lat, lon) {
+  const n   = jd(date) - 2451545.0;
+  const L   = ((280.460 + 0.9856474*n) % 360 + 360) % 360;
+  const g   = ((357.528 + 0.9856003*n) % 360 + 360) % 360;
+  const lam = L + 1.915*Math.sin(g*D2R) + 0.020*Math.sin(2*g*D2R);
+  const eps = 23.439 - 0.0000004*n;
+  const dec = Math.asin(Math.sin(eps*D2R)*Math.sin(lam*D2R)) * R2D;
+  const RA  = Math.atan2(Math.cos(eps*D2R)*Math.sin(lam*D2R), Math.cos(lam*D2R)) * R2D;
+  const EoT = 4*(L - RA - 360*Math.floor((L-RA)/360));
+  const cosH= (Math.cos(90.833*D2R) - Math.sin(lat*D2R)*Math.sin(dec*D2R))
+              / (Math.cos(lat*D2R)*Math.cos(dec*D2R));
+  if (cosH >  1) return {rise:null, set:null, dayLen:0,  polar:'night'};
+  if (cosH < -1) return {rise:null, set:null, dayLen:24, polar:'day'};
+  const H    = Math.acos(cosH)*R2D;
+  const noon = 12 - EoT/60 - lon/15;
+  return {rise:noon-H/15, set:noon+H/15, dayLen:2*H/15, polar:null};
+}
+
+// ================================================================
+//  LEVER / COUCHER — LUNE (itératif)
+// ================================================================
+function moonAlt(date, lat, lon) {
+  const mp = moonPos(date);
+  return Math.asin(
+    Math.sin(lat*D2R)*Math.sin(mp.lat*D2R) +
+    Math.cos(lat*D2R)*Math.cos(mp.lat*D2R)*Math.cos((lon-mp.lon)*D2R)
+  ) * R2D;
+}
+
+function moonRiseSet(date, lat, lon) {
+  const t0  = new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate(),0,0,0));
+  const step = 10*60*1000;
+  let prev   = moonAlt(t0, lat, lon);
+  let rise=null, set=null;
+  for (let i=1; i<=144; i++) {
+    const t   = new Date(t0.getTime()+i*step);
+    const alt = moonAlt(t, lat, lon);
+    if (prev<0 && alt>=0 && rise===null) {
+      const f = -prev/(alt-prev);
+      const ms= t0.getTime()+(i-1+f)*step;
+      const d = new Date(ms);
+      rise = d.getUTCHours() + d.getUTCMinutes()/60 + d.getUTCSeconds()/3600;
+    }
+    if (prev>=0 && alt<0 && set===null) {
+      const f = prev/(prev-alt);
+      const ms= t0.getTime()+(i-1+f)*step;
+      const d = new Date(ms);
+      set = d.getUTCHours() + d.getUTCMinutes()/60 + d.getUTCSeconds()/3600;
+    }
+    prev = alt;
+  }
+  return {rise, set};
+}
+
+// ================================================================
+//  TERMINATEUR — polygone nuit/crépuscule
+// ================================================================
+function terminatorPoly(sLat, sLon, altDeg) {
+  const zenith = 90 - altDeg;
+  const cosZ=Math.cos(zenith*D2R), sinZ=Math.sin(zenith*D2R);
+  const sinS=Math.sin(sLat*D2R),   cosS=Math.cos(sLat*D2R);
+  const pts=[];
+  for (let az=0; az<360; az+=1) {
+    const a=az*D2R;
+    const sinLat=sinS*cosZ + cosS*sinZ*Math.cos(a);
+    const lat=Math.asin(Math.max(-1,Math.min(1,sinLat)))*R2D;
+    const dLon=Math.atan2(sinZ*Math.sin(a)*cosS, cosZ-sinS*Math.sin(lat*D2R))*R2D;
+    let lon=sLon+dLon;
+    while(lon> 180) lon-=360;
+    while(lon<-180) lon+=360;
+    pts.push([lat,lon]);
+  }
+  pts.sort((a,b)=>a[1]-b[1]);
+  const pole=sLat>=0?-90:90;
+  return [...pts,[pole,180],[pole,-180]];
+}
+
+// ================================================================
+//  LIGNES LEVER/COUCHER SOLEIL
+// ================================================================
+function sunriseSetLines(sLat, sLon) {
+  const rise=[], set=[];
+  for (let lat=-85; lat<=85; lat+=1) {
+    const t = -Math.tan(lat*D2R)*Math.tan(sLat*D2R);
+    if (t<-1||t>1) continue;
+    const H = Math.acos(t)*R2D;
+    let rLon=sLon-H, sLon2=sLon+H;
+    while(rLon> 180) rLon-=360; while(rLon<-180) rLon+=360;
+    while(sLon2> 180) sLon2-=360; while(sLon2<-180) sLon2+=360;
+    rise.push([lat, rLon]);
+    set.push([lat, sLon2]);
+  }
+  return {rise, set};
+}
+
+// ================================================================
+//  ICÔNES
+// ================================================================
+function sunIcon() {
+  return L.divIcon({ className:'',
+    html:`<svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
+      <defs><radialGradient id="sunG" cx="40%" cy="35%" r="60%">
+        <stop offset="0%" stop-color="#fffbe0"/><stop offset="100%" stop-color="#ffcc00"/>
+      </radialGradient></defs>
+      ${[0,30,60,90,120,150,180,210,240,270,300,330].map(a=>{
+        const r1=13,r2=19,ax=Math.cos(a*D2R),ay=Math.sin(a*D2R);
+        return `<line x1="${21+ax*r1}" y1="${21+ay*r1}" x2="${21+ax*r2}" y2="${21+ay*r2}" stroke="#ffd000" stroke-width="${a%60===0?2:1.3}" stroke-linecap="round"/>`;
+      }).join('')}
+      <circle cx="21" cy="21" r="10" fill="url(#sunG)" stroke="#ff9900" stroke-width="1.2"/>
+    </svg>`,
+    iconSize:[42,42], iconAnchor:[21,21] });
+}
+
+function moonIcon() {
+  return L.divIcon({ className:'',
+    html:`<svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="13" cy="13" r="11" fill="#c8daee" stroke="#6080b0" stroke-width="1"/>
+      <circle cx="9"  cy="10" r="2.2" fill="rgba(80,100,160,0.35)"/>
+      <circle cx="15" cy="15" r="1.7" fill="rgba(80,100,160,0.3)"/>
+      <circle cx="10" cy="16" r="1.4" fill="rgba(80,100,160,0.25)"/>
+      <circle cx="17" cy="10" r="1.1" fill="rgba(80,100,160,0.2)"/>
+    </svg>`,
+    iconSize:[26,26], iconAnchor:[13,13] });
+}
+
+function mkPlanetIcon(sym, color, sz) {
+  return L.divIcon({ className:'',
+    html:`<svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="${sz/2}" cy="${sz/2}" r="${sz/2-0.5}" fill="${color}" stroke="rgba(255,255,255,0.25)" stroke-width="0.7"/>
+      <text x="${sz/2}" y="${sz/2+3}" text-anchor="middle" font-size="${Math.round(sz*0.52)}" font-family="sans-serif" fill="rgba(255,255,255,0.92)">${sym}</text>
+    </svg>`,
+    iconSize:[sz,sz], iconAnchor:[sz/2,sz/2] });
+}
+
+// ================================================================
+//  CANVAS PHASE LUNAIRE
+// ================================================================
+function drawMoonCanvas(elong) {
+  const canvas = document.getElementById('moonCanvas');
+  const ctx    = canvas.getContext('2d');
+  const W=136, R=60, ox=68, oy=68;
+  ctx.clearRect(0,0,W,W);
+
+  // Fond + étoiles
+  ctx.fillStyle='#030810';
+  ctx.beginPath(); ctx.arc(ox,oy,R,0,2*Math.PI); ctx.fill();
+  const stars=[[12,18,0.6],[30,10,0.5],[52,22,0.7],[78,8,0.5],[94,18,0.6],[110,12,0.5],
+               [122,28,0.7],[10,50,0.5],[126,52,0.6],[14,80,0.6],[60,90,0.7],[106,82,0.5],
+               [128,90,0.6],[38,112,0.5],[82,122,0.6],[118,116,0.5],[24,130,0.6],[92,134,0.5]];
+  stars.forEach(([sx,sy,r])=>{ ctx.globalAlpha=0.22+r*0.28; ctx.fillStyle='rgba(200,220,255,0.9)';
+    ctx.beginPath(); ctx.arc(sx,sy,r,0,2*Math.PI); ctx.fill(); });
+  ctx.globalAlpha=1;
+
+  // Off-screen canvas
+  const off=document.createElement('canvas'); off.width=W; off.height=W;
+  const oc=off.getContext('2d');
+  const grd=oc.createRadialGradient(ox-16,oy-16,4,ox,oy,R);
+  grd.addColorStop(0,'#e8f0f8'); grd.addColorStop(0.5,'#c0d0e4'); grd.addColorStop(1,'#98b0c8');
+  oc.fillStyle=grd; oc.fillRect(0,0,W,W);
+  [[72,50,16,11,0.22],[86,62,11,8,0.20],[84,78,10,7,0.22],
+   [62,66,9,6,0.18],[96,70,8,5,0.16],[68,88,13,8,0.20],[82,92,8,5,0.18]
+  ].forEach(([mx,my,rx,ry,op])=>{
+    oc.fillStyle=`rgba(90,110,150,${op})`;
+    oc.beginPath(); oc.ellipse(mx,my,rx,ry,0,0,2*Math.PI); oc.fill();
+  });
+
+  // Ombre par scanlines — formule correcte
+  // Croissant (0-180): xT=ox+cos(e)*hc, sombre si px<=xT
+  // Décroissant (180-360): xT=ox-cos(e)*hc, sombre si px>=xT
+  const cosE=Math.cos(elong*D2R);
+  const img=oc.getImageData(0,0,W,W); const d=img.data;
+  for (let py=0;py<W;py++) {
+    const dy=py-oy; if(Math.abs(dy)>=R) continue;
+    const hc=Math.sqrt(R*R-dy*dy);
+    const xL=Math.ceil(ox-hc), xR=Math.floor(ox+hc);
+    if (elong<=180) {
+      const xT=ox+cosE*hc;
+      for(let px=xL;px<=xR;px++) if(px<=xT){const i=(py*W+px)*4;d[i]=2;d[i+1]=7;d[i+2]=16;d[i+3]=235;}
+    } else {
+      const xT=ox-cosE*hc;
+      for(let px=xL;px<=xR;px++) if(px>=xT){const i=(py*W+px)*4;d[i]=2;d[i+1]=7;d[i+2]=16;d[i+3]=235;}
+    }
+  }
+  oc.putImageData(img,0,0);
+
+  // Clip + draw sur canvas principal
+  ctx.save();
+  ctx.beginPath(); ctx.arc(ox,oy,R,0,2*Math.PI); ctx.clip();
+  ctx.drawImage(off,0,0);
+  ctx.restore();
+
+  // Halo + contour
+  const gr=ctx.createRadialGradient(ox,oy,R-1,ox,oy,R+12);
+  gr.addColorStop(0,'rgba(160,200,255,0.15)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(ox,oy,R+12,0,2*Math.PI); ctx.fill();
+  ctx.strokeStyle='rgba(90,140,210,0.35)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(ox,oy,R,0,2*Math.PI); ctx.stroke();
+}
+
+// ================================================================
+//  COUCHES DYNAMIQUES
+// ================================================================
+let dynLayers = [];
+function clearDyn() {
+  dynLayers.forEach(l=>{ try{map.removeLayer(l);}catch(e){} });
+  dynLayers=[];
+}
+function addDyn(l) { l.addTo(map); dynLayers.push(l); return l; }
+
+// ================================================================
+//  MISE À JOUR PRINCIPALE
+// ================================================================
+function update() {
+  clearDyn();
+  const now = new Date();
+  const sp  = sunPos(now);
+  const mp  = moonPos(now);
+  const ph  = moonPhase(now);
+  const pl  = planetPos(now);
+
+  // ---- Crépuscules ----
+  addDyn(L.polygon(terminatorPoly(sp.lat,sp.lon,-18),{color:'none',fillColor:'#001840',fillOpacity:0.32,interactive:false,smoothFactor:3}));
+  addDyn(L.polygon(terminatorPoly(sp.lat,sp.lon,-12),{color:'none',fillColor:'#003060',fillOpacity:0.28,interactive:false,smoothFactor:3}));
+  addDyn(L.polygon(terminatorPoly(sp.lat,sp.lon, -6),{color:'none',fillColor:'#004888',fillOpacity:0.22,interactive:false,smoothFactor:3}));
+  addDyn(L.polygon(terminatorPoly(sp.lat,sp.lon,  0),{color:'none',fillColor:'#000a20',fillOpacity:0.68,interactive:false,smoothFactor:3}));
+
+  // ---- Lignes lever/coucher soleil ----
+  const {rise:risePts, set:setPts} = sunriseSetLines(sp.lat, sp.lon);
+  if (risePts.length>2) {
+    addDyn(L.polyline(risePts,{color:'#ffaa00',weight:2,opacity:0.9,interactive:false}));
+    addDyn(L.polyline(setPts, {color:'#ff5500',weight:2,opacity:0.9,interactive:false}));
+  }
+
+  // ---- Planètes ----
+  PLANETS.forEach(p=>{
+    const pos=pl[p.key];
+    addDyn(L.marker([pos.lat,pos.lon],{icon:mkPlanetIcon(p.sym,p.color,p.sz),interactive:false,zIndexOffset:700}));
+  });
+
+  // ---- Lune ----
+  addDyn(L.marker([mp.lat,mp.lon],{icon:moonIcon(),interactive:false,zIndexOffset:900}));
+
+  // ---- Soleil ----
+  addDyn(L.marker([sp.lat,sp.lon],{icon:sunIcon(),interactive:false,zIndexOffset:1000}));
+
+  // ---- Panneau phase ----
+  document.getElementById('phase-name').innerHTML = ph.name;
+  document.getElementById('phase-illum').textContent = 'Illumination : '+Math.round(ph.illum*100)+' %';
+  document.getElementById('v-age').textContent = ph.age.toFixed(2)+' jours';
+  drawMoonCanvas(ph.elong);
+
+  // ---- Lever/coucher soleil ----
+  const tzOff = -now.getTimezoneOffset()/60;
+  const sol   = solarRiseSet(now, OBS_LAT, OBS_LON);
+  if (sol.polar==='day') {
+    document.getElementById('v-sunrise').textContent='Soleil polaire';
+    document.getElementById('v-sunset').textContent='Soleil polaire';
+    document.getElementById('v-daylength').textContent='24h 00m';
+  } else if (sol.polar==='night') {
+    document.getElementById('v-sunrise').textContent='Nuit polaire';
+    document.getElementById('v-sunset').textContent='Nuit polaire';
+    document.getElementById('v-daylength').textContent='0h 00m';
+  } else {
+    document.getElementById('v-sunrise').textContent=hms(sol.rise+tzOff);
+    document.getElementById('v-sunset').textContent=hms(sol.set+tzOff);
+    const dlH=Math.floor(sol.dayLen), dlM=Math.round((sol.dayLen-dlH)*60);
+    document.getElementById('v-daylength').textContent=dlH+'h '+String(dlM).padStart(2,'0')+'m';
+  }
+
+  // ---- Lever/coucher lune ----
+  const lun = moonRiseSet(now, OBS_LAT, OBS_LON);
+  document.getElementById('v-moonrise').textContent = lun.rise!==null ? hms(lun.rise+tzOff) : 'Aucun';
+  document.getElementById('v-moonset').textContent  = lun.set !==null ? hms(lun.set +tzOff) : 'Aucun';
+}
+
+// ================================================================
+//  HORLOGE
+// ================================================================
+function tick() {
+  const now=new Date();
+  document.getElementById('clock').innerHTML=
+    now.toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+'<br>'+
+    'Local : '+now.toLocaleTimeString('fr-FR')+
+    ' &nbsp;·&nbsp; UTC : '+now.toLocaleTimeString('fr-FR',{timeZone:'UTC'});
+}
+
+// ================================================================
+//  INIT
+// ================================================================
+update();
+setInterval(update, 60000);
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
